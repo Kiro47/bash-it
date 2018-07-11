@@ -5,7 +5,15 @@ function ips ()
 {
     about 'display all ip addresses for this host'
     group 'base'
-    ifconfig | awk '/inet /{ print $2 }'
+    if command -v ifconfig &>/dev/null
+    then
+        ifconfig | awk '/inet /{ gsub(/addr:/, ""); print $2 }'
+    elif command -v ip &>/dev/null
+    then
+        ip addr | grep -oP 'inet \K[\d.]+'
+    else
+        echo "You don't have ifconfig or ip command installed!"
+    fi
 }
 
 function down4me ()
@@ -14,17 +22,24 @@ function down4me ()
     param '1: website url'
     example '$ down4me http://www.google.com'
     group 'base'
-    curl -s "http://www.downforeveryoneorjustme.com/$1" | sed '/just you/!d;s/<[^>]*>//g'
+    curl -Ls "http://downforeveryoneorjustme.com/$1" | sed '/just you/!d;s/<[^>]*>//g'
 }
 
 function myip ()
 {
     about 'displays your ip address, as seen by the Internet'
     group 'base'
-    res=$(curl -s checkip.dyndns.org | grep -Eo '[0-9\.]+')
+    list=("http://myip.dnsomatic.com/" "http://checkip.dyndns.com/" "http://checkip.dyndns.org/")
+    for url in ${list[*]}
+    do
+        res=$(curl -s "${url}")
+        if [ $? -eq 0 ];then
+            break;
+        fi
+    done
+    res=$(echo "$res" | grep -Eo '[0-9\.]+')
     echo -e "Your public IP is: ${echo_bold_green} $res ${echo_normal}"
 }
-
 
 function pickfrom ()
 {
@@ -76,13 +91,14 @@ function pmdown ()
 
 function mkcd ()
 {
-    about 'make a directory and cd into it'
-    param 'path to create'
+    about 'make one or more directories and cd into the last one'
+    param 'one or more directories to create'
     example '$ mkcd foo'
     example '$ mkcd /tmp/img/photos/large'
+    example '$ mkcd foo foo1 foo2 fooN'
+    example '$ mkcd /tmp/img/photos/large /tmp/img/photos/self /tmp/img/photos/Beijing'
     group 'base'
-    mkdir -p "$*"
-    cd "$*"
+    mkdir -p -- "$@" && eval cd -- "\"\$$#\""
 }
 
 function lsgrep ()
@@ -92,49 +108,20 @@ function lsgrep ()
     ls | grep "$*"
 }
 
-
-function pman ()
-{
-    about 'view man documentation in Preview'
-    param '1: man page to view'
-    example '$ pman bash'
-    group 'base'
-    man -t "${1}" | open -f -a $PREVIEW
-}
-
-
-function pcurl ()
-{
-    about 'download file and Preview it'
-    param '1: download URL'
-    example '$ pcurl http://www.irs.gov/pub/irs-pdf/fw4.pdf'
-    group 'base'
-    curl "${1}" | open -f -a $PREVIEW
-}
-
-function pri ()
-{
-    about 'display information about Ruby classes, modules, or methods, in Preview'
-    param '1: Ruby method, module, or class'
-    example '$ pri Array'
-    group 'base'
-    ri -T "${1}" | open -f -a $PREVIEW
-}
-
 function quiet ()
 {
     about 'what *does* this do?'
     group 'base'
-	$* &> /dev/null &
+    $* &> /dev/null &
 }
 
 function banish-cookies ()
 {
     about 'redirect .adobe and .macromedia files to /dev/null'
     group 'base'
-	rm -r ~/.macromedia ~/.adobe
-	ln -s /dev/null ~/.adobe
-	ln -s /dev/null ~/.macromedia
+    rm -r ~/.macromedia ~/.adobe
+    ln -s /dev/null ~/.adobe
+    ln -s /dev/null ~/.macromedia
 }
 
 function usage ()
@@ -143,22 +130,22 @@ function usage ()
     param '1: directory name'
     group 'base'
     if [ $(uname) = "Darwin" ]; then
-        if [ -n $1 ]; then
-            du -hd $1
+        if [ -n "$1" ]; then
+            du -hd 1 "$1"
         else
             du -hd 1
         fi
 
     elif [ $(uname) = "Linux" ]; then
-        if [ -n $1 ]; then
-            du -h --max-depth=1 $1
+        if [ -n "$1" ]; then
+            du -h --max-depth=1 "$1"
         else
             du -h --max-depth=1
         fi
     fi
 }
 
-if [ ! -e $BASH_IT/plugins/enabled/todo.plugin.bash ]; then
+if [ ! -e "${BASH_IT}/plugins/enabled/todo.plugin.bash" ] && [ ! -e "${BASH_IT}/plugins/enabled/*${BASH_IT_LOAD_PRIORITY_SEPARATOR}todo.plugin.bash" ]; then
 # if user has installed todo plugin, skip this...
     function t ()
     {
@@ -184,7 +171,6 @@ function command_exists ()
 
 mkiso ()
 {
-
     about 'creates iso from current dir in the parent dir (unless defined)'
     param '1: ISO name'
     param '2: dest/path'
@@ -217,5 +203,13 @@ function buf ()
     group 'base'
     local filename=$1
     local filetime=$(date +%Y%m%d_%H%M%S)
-    cp "${filename}" "${filename}_${filetime}"
+    cp -a "${filename}" "${filename}_${filetime}"
+}
+
+function del() {
+    about 'move files to hidden folder in tmp, that gets cleared on each reboot'
+    param 'file or folder to be deleted'
+    example 'del ./file.txt'
+    group 'base'
+    mkdir -p /tmp/.trash && mv "$@" /tmp/.trash;
 }
